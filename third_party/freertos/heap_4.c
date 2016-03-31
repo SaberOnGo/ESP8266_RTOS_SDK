@@ -181,6 +181,7 @@ void *pvReturn = NULL;
 		if( pxEnd == NULL )
 		{
 			prvHeapInit();
+			rtthread_startup();
 		}
 
 		/* Check the requested block size is not so large that the top bit is

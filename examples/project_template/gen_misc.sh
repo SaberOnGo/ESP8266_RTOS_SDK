@@ -137,9 +137,9 @@ echo "enter (0/2/3/4/5/6, default 0):"
 read input
 
 if [ -z "$input" ]; then
-    spi_size_map=0
-    echo "spi size: 512KB"
-    echo "spi ota map:  256KB + 256KB"
+    spi_size_map=6
+    echo "spi size: 4096KB"
+    echo "spi ota map:  1024KB + 1024KB"
 elif [ $input == 2 ]; then
     spi_size_map=2
     echo "spi size: 1024KB"
@@ -161,9 +161,9 @@ elif [ $input == 6 ]; then
     echo "spi size: 4096KB"
     echo "spi ota map:  1024KB + 1024KB"
 else
-    spi_size_map=0
-    echo "spi size: 512KB"
-    echo "spi ota map:  256KB + 256KB"
+    spi_size_map=6
+    echo "spi size: 4096KB"
+    echo "spi ota map:  1024KB + 1024KB"
 fi
 
 echo ""

@@ -207,19 +207,6 @@ void SoftIsrHdl(void *arg)
 }
 #endif
 
-void xPortSysTickHandle (void)
-{
-	//CloseNMI();
-	{
-		if(xTaskIncrementTick() !=pdFALSE )
-		{
-			//GPIO_REG_WRITE(GPIO_STATUS_W1TS_ADDRESS, 0x40);
-			vTaskSwitchContext();
-		}
-	}
-	//OpenNMI();
-}
-
 /*
  * See header file for description.
  */
