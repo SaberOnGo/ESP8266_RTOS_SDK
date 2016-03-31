@@ -51,8 +51,7 @@ rt_uint8_t *rt_hw_stack_init(void *tentry, void *parameter, rt_uint8_t *stack_ad
     return (rt_uint8_t *)sp;
 }
 
-static signed rtt_init = 0;
-void rtthread_startup(void)
+void ICACHE_FLASH_ATTR rtthread_startup(void)
 {
     /* show version */
     rt_show_version();
@@ -76,26 +75,10 @@ void rtthread_startup(void)
     rt_thread_idle_init();
 }
 
-void ICACHE_FLASH_ATTR ff(void *pp)
-{
-    int cc = 0;
-    while (1)
-    {
-        ets_printf("%d run1 %d\n",pp,rt_tick_get());
-        rt_thread_delay(100);
-        cc++;
-        cc++;
-        cc++;
-        cc++;
-        cc++;
-        ets_printf("%d run2 %d\n",pp,cc);
-    }
-}
-
 signed portBASE_TYPE ICACHE_FLASH_ATTR xTaskGenericCreate( pdTASK_CODE pxTaskCode, const signed char * const pcName, unsigned short usStackDepth, void *pvParameters, unsigned portBASE_TYPE uxPriority, xTaskHandle *pxCreatedTask, portSTACK_TYPE *puxStackBuffer, const xMemoryRegion * const xRegions )
 {
     signed portBASE_TYPE xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-    rt_thread_t thread = *pxCreatedTask = rt_thread_create(pcName,ff,(void *)(20-uxPriority),10000,20-uxPriority,10);
+    rt_thread_t thread = *pxCreatedTask = rt_thread_create(pcName,pxTaskCode,pvParameters,usStackDepth,20-uxPriority,10);
     if (*pxCreatedTask != 0)
     {
         rt_thread_startup(*pxCreatedTask);
@@ -105,7 +88,7 @@ signed portBASE_TYPE ICACHE_FLASH_ATTR xTaskGenericCreate( pdTASK_CODE pxTaskCod
 }
 
 void ICACHE_FLASH_ATTR vTaskStartScheduler(void) { xPortStartScheduler(); }
-void ICACHE_FLASH_ATTR vTaskDelete(xTaskHandle xTaskToDelete) { rt_thread_delete(xTaskToDelete); }
+void ICACHE_FLASH_ATTR vTaskDelete(xTaskHandle xTaskToDelete) { ets_printf("%s\n",__func__);/*rt_thread_delete(xTaskToDelete);*/ }
 void ICACHE_FLASH_ATTR vTaskDelay(portTickType xTicksToDelay) { rt_thread_delay(xTicksToDelay); }
 void ICACHE_FLASH_ATTR vTaskSuspendAll(void) { rt_enter_critical(); }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xTaskResumeAll( void ) { rt_exit_critical();return pdTRUE; }

@@ -219,15 +219,17 @@ void rt_schedule(void)
         /* if the destination thread is not the same as current thread */
         if (to_thread != rt_current_thread)
         {
-            from_thread         = rt_current_thread;
             if (rt_interrupt_nest == 0)
             {
-                rt_hw_context_switch((rt_uint32_t)&from_thread->sp,
+                rt_hw_context_switch((rt_uint32_t)&rt_current_thread->sp,
                                      (rt_uint32_t)&to_thread->sp);
+                /* enable interrupt */
+                rt_hw_interrupt_enable(level);
+                return;
             }
-            else
-            {
+
             rt_current_priority = (rt_uint8_t)highest_ready_priority;
+            from_thread         = rt_current_thread;
             rt_current_thread   = to_thread;
 
             RT_OBJECT_HOOK_CALL(rt_scheduler_hook, (from_thread, to_thread));
@@ -245,6 +247,13 @@ void rt_schedule(void)
             _rt_scheduler_stack_check(to_thread);
 #endif
 
+            if (rt_interrupt_nest == 0)
+            {
+                rt_hw_context_switch((rt_uint32_t)&from_thread->sp,
+                                     (rt_uint32_t)&to_thread->sp);
+            }
+            else
+            {
                 RT_DEBUG_LOG(RT_DEBUG_SCHEDULER, ("switch in interrupt\n"));
 
                 rt_hw_context_switch_interrupt((rt_uint32_t)&from_thread->sp,
