@@ -8,17 +8,9 @@ volatile portSTACK_TYPE *pxCurrentTCB = 0;
 static rt_thread_t cur_old = 0;
 extern rt_thread_t rt_current_thread;
 static unsigned short mq_index = 0;
-static char mq_int_req = pdFALSE;
-static char mq_in_int = 0;
 
 void rt_hw_context_switch(rt_uint32_t from, rt_uint32_t to)
 {
-    //skip PendSV in int
-    if (mq_in_int)
-    {
-        mq_int_req = pdTRUE;
-        return;
-    }
 #ifdef SHOW_DEBUG_INFO
     ets_printf("Switch1 cur:%s %d\n",rt_current_thread->name,WDEV_NOW());
 #endif
@@ -195,10 +187,22 @@ signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSend( xQueueHandle xQueue, c
     ets_printf("QueueSend cur:%s name:%s wait:%d pos:%d\n",rt_current_thread->name,mq->parent.parent.name,xTicksToWait,xCopyPosition);
 #endif
     rt_err_t err = RT_EOK;
-    if (xCopyPosition == 0)
-        err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
-    else if (xCopyPosition == 1)
-        err = rt_mq_urgent(mq,(void *)pvItemToQueue,mq->msg_size);
+    portTickType tick = 0;
+    while (1)
+    {
+        if (xCopyPosition == 0)
+            err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
+        else if (xCopyPosition == 1)
+            err = rt_mq_urgent(mq,(void *)pvItemToQueue,mq->msg_size);
+        else
+            configASSERT(0);
+        if (xTicksToWait == 0 || err == RT_EOK)
+            break;
+        if (tick > xTicksToWait)
+            break;
+        rt_thread_delay(1);
+        tick++;
+    }
 #ifdef SHOW_DEBUG_INFO
     ets_printf("QueueSendOver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
 #endif
@@ -206,8 +210,7 @@ signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSend( xQueueHandle xQueue, c
 }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSendFromISR( xQueueHandle xQueue, const void * const pvItemToQueue, signed portBASE_TYPE *pxHigherPriorityTaskWoken, portBASE_TYPE xCopyPosition )
 {
-    mq_in_int = 1;
-    mq_int_req = pdFALSE;
+    rt_interrupt_enter();
     rt_mq_t mq = xQueue;
 #ifdef SHOW_DEBUG_INFO
     ets_printf("QueueSendISR cur:%s name:%s pos:%d\n",rt_current_thread->name,mq->parent.parent.name,xCopyPosition);
@@ -217,12 +220,13 @@ signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSendFromISR( xQueueHandle xQ
         err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
     else if (xCopyPosition == 1)
         err = rt_mq_urgent(mq,(void *)pvItemToQueue,mq->msg_size);
+    else
+        configASSERT(0);
 #ifdef SHOW_DEBUG_INFO
     ets_printf("QueueSendISROver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
 #endif
-    if (pxHigherPriorityTaskWoken) *pxHigherPriorityTaskWoken = mq_int_req;
-    mq_in_int = 0;
-    mq_int_req = pdFALSE;
+    if (pxHigherPriorityTaskWoken) *pxHigherPriorityTaskWoken = pdFAIL;
+    rt_interrupt_leave();
     return (err==RT_EOK)?pdPASS:errQUEUE_FULL;
 }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericReceive( xQueueHandle xQueue, const void * const pvBuffer, portTickType xTicksToWait, portBASE_TYPE xJustPeeking )
@@ -231,32 +235,21 @@ signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericReceive( xQueueHandle xQueue
 #ifdef SHOW_DEBUG_INFO
     ets_printf("QueueRecv cur:%s name:%s wait:%d peek:%d\n",rt_current_thread->name,mq->parent.parent.name,xTicksToWait,xJustPeeking);
 #endif
-    rt_err_t err = rt_mq_recv(mq,(void *)pvBuffer,mq->msg_size,xTicksToWait);
+    rt_err_t err = RT_EOK;
+    if (xJustPeeking != pdTRUE)
+        err = rt_mq_recv(mq,(void *)pvBuffer,mq->msg_size,xTicksToWait);
+    else
+        configASSERT(0);
 #ifdef SHOW_DEBUG_INFO
     ets_printf("QueueRecvOver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
 #endif
     return (err==RT_EOK)?pdPASS:errQUEUE_EMPTY;
 }
-signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueReceiveFromISR( xQueueHandle xQueue, const void * const pvBuffer, signed portBASE_TYPE *pxHigherPriorityTaskWoken )
-{
-    mq_in_int = 1;
-    mq_int_req = pdFALSE;
+unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaitingFromISR(const xQueueHandle xQueue)
+{ 
     rt_mq_t mq = xQueue;
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueRecvISR cur:%s name:%s\n",rt_current_thread->name,mq->parent.parent.name);
-#endif
-    rt_err_t err = rt_mq_recv(mq,(void *)pvBuffer,mq->msg_size,0);
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueRecvISROver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
-#endif
-    if (pxHigherPriorityTaskWoken) *pxHigherPriorityTaskWoken = mq_int_req;
-    mq_in_int = 0;
-    mq_int_req = pdFALSE;
-    return (err==RT_EOK)?pdPASS:errQUEUE_EMPTY;
+    return mq->entry;
 }
-
-unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaitingFromISR(const xQueueHandle xQueue) { rt_mq_t mq = xQueue; return mq->entry; }
-unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaiting(const xQueueHandle xQueue) { rt_mq_t mq = xQueue; return mq->entry; }
 
 xTimerHandle ICACHE_FLASH_ATTR xTimerCreate( const signed char * const pcTimerName, portTickType xTimerPeriodInTicks, unsigned portBASE_TYPE uxAutoReload, void *pvTimerID, tmrTIMER_CALLBACK pxCallbackFunction )
 {
@@ -276,11 +269,5 @@ void ICACHE_FLASH_ATTR vTaskStepTick(portTickType xTicksToJump)
 portTickType ICACHE_FLASH_ATTR prvGetExpectedIdleTime(void)
 {
     ets_printf("prvGetExpectedIdleTime Failed!\n");
-    return 0;
-}
-
-xQueueHandle ICACHE_FLASH_ATTR xQueueCreateMutex( unsigned char ucQueueType )
-{
-    ets_printf("xQueueCreateMutex Failed!\n");
     return 0;
 }
