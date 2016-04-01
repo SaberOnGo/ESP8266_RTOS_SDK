@@ -32,8 +32,8 @@
 #define RT_USING_HOOK
 
 /* Using Software Timer */
-//#define RT_USING_TIMER_SOFT
-#define RT_TIMER_THREAD_PRIO		4
+#define RT_USING_TIMER_SOFT
+#define RT_TIMER_THREAD_PRIO		12
 #define RT_TIMER_THREAD_STACK_SIZE	512
 
 /* SECTION: IPC */
@@ -54,6 +54,32 @@
 
 /* Using Dynamic Heap Management */
 #define RT_USING_HEAP
+
+/* SECTION: Device System */
+/* Using Device System */
+#define RT_USING_DEVICE
+#define RT_USING_DEVICE_IPC
+#define RT_USING_SERIAL
+#define RT_USING_SPI
+#define RT_USING_I2C
+#define RT_USING_I2C_BITOPS
+#define RT_USING_PIN
+
+/* SECTION: Console options */
+#define RT_USING_CONSOLE
+/* the buffer size of console*/
+#define RT_CONSOLEBUF_SIZE	128
+
+/* SECTION: finsh, a C-Express shell */
+#define RT_USING_FINSH
+#define FINSH_USING_MSH
+#define FINSH_USING_MSH_DEFAULT
+#define FINSH_USING_MSH_ONLY
+
+/* Using symbol table */
+#define FINSH_USING_SYMTAB
+#define FINSH_USING_DESCRIPTION
+#define FINSH_THREAD_STACK_SIZE	4096
 
 #define WDEV_NOW() REG_READ(0x3ff20c00)
 #define ShowInfo(s,d) {ets_printf("n:%s t:%d\n",s,WDEV_NOW()); if(d) ets_delay_us(d);}

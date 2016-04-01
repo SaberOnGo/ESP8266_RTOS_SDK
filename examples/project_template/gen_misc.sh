@@ -133,7 +133,7 @@ echo "    3=2048KB( 512KB+ 512KB)"
 echo "    4=4096KB( 512KB+ 512KB)"
 echo "    5=2048KB(1024KB+1024KB)"
 echo "    6=4096KB(1024KB+1024KB)"
-echo "enter (0/2/3/4/5/6, default 0):"
+echo "enter (0/2/3/4/5/6, default 6):"
 read input
 
 if [ -z "$input" ]; then

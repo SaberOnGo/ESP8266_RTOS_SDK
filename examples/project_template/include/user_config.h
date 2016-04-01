@@ -25,5 +25,11 @@
 #ifndef __USER_CONFIG_H__
 #define __USER_CONFIG_H__
 
+#include "esp_common.h"
+#define CONSOLE_DEVICE "uart0"
+#define FINSH_DEVICE_NAME "uart0"
+
+void rt_hw_board_init(void);
+
 #endif
 

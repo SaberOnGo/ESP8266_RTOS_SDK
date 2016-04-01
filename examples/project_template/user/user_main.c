@@ -22,7 +22,31 @@
  *
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <rtthread.h>
+#include <rtdevice.h>
+#include "user_config.h"
 #include "esp_common.h"
+
+extern long list_thread(void);
+ALIGN(RT_ALIGN_SIZE)
+static char thread_main_stack[2048];
+struct rt_thread thread_main;
+static void rt_thread_entry_main(void* parameter)
+{
+    /* init finsh */
+#ifdef RT_USING_FINSH
+    finsh_system_init();
+    finsh_set_device(FINSH_DEVICE_NAME);
+#endif
+
+    while (1)
+    {
+        rt_thread_delay(1000);
+    }
+}
 
 /******************************************************************************
  * FunctionName : user_init
@@ -32,7 +56,16 @@
 *******************************************************************************/
 void user_init(void)
 {
+    rt_hw_board_init();
     rt_show_version();
-    printf("SDK version:%s\n\n\n", system_get_sdk_version());
+    printf("\nSDK version:%s\n\n", system_get_sdk_version());
+    //
+    rt_thread_init(&thread_main,
+                   "main",
+                   rt_thread_entry_main,
+                   RT_NULL,
+                   &thread_main_stack[0],
+                   sizeof(thread_main_stack),13,10);
+    rt_thread_startup(&thread_main);
 }
 

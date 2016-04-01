@@ -82,6 +82,7 @@ task.h is included from an application file. */
 #include "freertos/task.h"
 
 #include "espressif/esp8266/ets_sys.h"
+#include <rtthread.h>
 
 #undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
@@ -268,6 +269,7 @@ void *pvReturn = NULL;
 }
 
 void *malloc(size_t nbytes) __attribute__((alias("pvPortMalloc")));
+void *rt_malloc(rt_size_t nbytes) __attribute__((alias("pvPortMalloc")));
 
 /*-----------------------------------------------------------*/
 
@@ -316,6 +318,7 @@ xBlockLink *pxLink;
 }
 
 void free(void *ptr) __attribute__((alias("vPortFree")));
+void rt_free(void *ptr) __attribute__((alias("vPortFree")));
 
 /*-----------------------------------------------------------*/
 
@@ -333,6 +336,7 @@ void *pvPortCalloc(size_t count, size_t size)
 }
 
 void *calloc(size_t count, size_t nbytes) __attribute__((alias("pvPortCalloc")));
+void *rt_calloc(rt_size_t count, rt_size_t size) __attribute__((alias("pvPortCalloc")));
 
 /*-----------------------------------------------------------*/
 
@@ -365,6 +369,7 @@ void *pvPortRealloc(void *mem, size_t newsize)
 }
 
 void *realloc(void *ptr, size_t nbytes) __attribute__((alias("pvPortRealloc")));
+void *rt_realloc(void *ptr, rt_size_t nbytes) __attribute__((alias("pvPortRealloc")));
 
 /*-----------------------------------------------------------*/
 

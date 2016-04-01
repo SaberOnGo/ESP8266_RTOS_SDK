@@ -222,10 +222,10 @@ void rt_mp_free_sethook(void (*hook)(struct rt_mempool *mp, void *block));
  */
 void rt_system_heap_init(void *begin_addr, void *end_addr);
 
-#define rt_malloc malloc
-#define rt_free free
-#define rt_realloc realloc
-#define rt_calloc calloc
+void *rt_malloc(rt_size_t nbytes);
+void rt_free(void *ptr);
+void *rt_realloc(void *ptr, rt_size_t nbytes);
+void *rt_calloc(rt_size_t count, rt_size_t size);
 void *rt_malloc_align(rt_size_t size, rt_size_t align);
 void rt_free_align(void *ptr);
 
@@ -475,7 +475,7 @@ void rt_components_board_init(void);
  * general kernel service
  */
 #ifndef RT_USING_CONSOLE
-#define rt_kprintf printf
+#define rt_kprintf(...)
 #else
 void rt_kprintf(const char *fmt, ...);
 #endif

@@ -492,7 +492,7 @@ struct rt_thread
     rt_list_t   tlist;                                  /**< the thread list */
 
     /* stack point and entry */
-volatile void  *sp;                                     /**< stack point */
+    void       *sp;                                     /**< stack point */
     void       *entry;                                  /**< entry */
     void       *parameter;                              /**< parameter */
     void       *stack_addr;                             /**< stack address */
