@@ -3,7 +3,12 @@
 #include <string.h>
 #include <rtthread.h>
 
+#define SHOW_DEBUG_INFO
 volatile portSTACK_TYPE *pxCurrentTCB = 0;
+static rt_thread_t cur_old = 0;
+extern rt_thread_t rt_current_thread;
+static unsigned short mq_index = 0;
+
 void rt_hw_context_switch(rt_uint32_t from, rt_uint32_t to)
 {
     PendSV(1);
@@ -78,88 +83,150 @@ void ICACHE_FLASH_ATTR rtthread_startup(void)
 signed portBASE_TYPE ICACHE_FLASH_ATTR xTaskGenericCreate( pdTASK_CODE pxTaskCode, const signed char * const pcName, unsigned short usStackDepth, void *pvParameters, unsigned portBASE_TYPE uxPriority, xTaskHandle *pxCreatedTask, portSTACK_TYPE *puxStackBuffer, const xMemoryRegion * const xRegions )
 {
     signed portBASE_TYPE xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-    rt_thread_t thread = *pxCreatedTask = rt_thread_create(pcName,pxTaskCode,pvParameters,usStackDepth,20-uxPriority,10);
+    rt_thread_t thread = *pxCreatedTask = rt_thread_create(pcName,pxTaskCode,pvParameters,usStackDepth+4096,20-uxPriority,10);
     if (*pxCreatedTask != 0)
     {
+#ifdef SHOW_DEBUG_INFO
+        ets_printf("TaskCreate name:%s pri:%d size:%d\n",pcName,(20-uxPriority),(usStackDepth+4096));
+#endif
         rt_thread_startup(*pxCreatedTask);
         xReturn = pdPASS;
     }
     return xReturn;
 }
+void ICACHE_FLASH_ATTR vTaskDelete(xTaskHandle xTaskToDelete)
+{
+    rt_thread_t thread = xTaskToDelete;
+    if (xTaskToDelete == 0)
+        thread = rt_current_thread;
+#ifdef SHOW_DEBUG_INFO
+    ets_printf("TaskDelete name:%s\n",thread->name);
+#endif
+    rt_thread_suspend(thread);
+}
+void ICACHE_FLASH_ATTR vTaskSwitchContext(void)
+{
+    rt_interrupt_enter();
+    cur_old = rt_current_thread;
+    rt_schedule();
+#ifdef SHOW_DEBUG_INFO
+    if (cur_old != rt_current_thread)
+    {
+        if (cur_old)
+            ets_printf("TaskSwitch %s -> %s\n",cur_old->name,rt_current_thread->name);
+        else
+            ets_printf("TaskSwitchTo %s\n",rt_current_thread->name);
+    }
+#endif
+    cur_old = rt_current_thread;
+    rt_interrupt_leave();
+}
+unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxTaskGetStackHighWaterMark( xTaskHandle xTask )
+{
+    register unsigned short usCount = 0U;
+    rt_thread_t thread = xTask;
+    if (xTask == 0)
+        thread = rt_current_thread;
+    rt_uint8_t *ptr = (rt_uint8_t *)thread->stack_addr;
+    while (*ptr == '#')
+    {
+        usCount ++;
+        ptr ++;
+    }
+    usCount /= sizeof( portSTACK_TYPE );
+    return usCount;
+}
 
 void ICACHE_FLASH_ATTR vTaskStartScheduler(void) { xPortStartScheduler(); }
-void ICACHE_FLASH_ATTR vTaskDelete(xTaskHandle xTaskToDelete) { ets_printf("%s\n",__func__);/*rt_thread_delete(xTaskToDelete);*/ }
 void ICACHE_FLASH_ATTR vTaskDelay(portTickType xTicksToDelay) { rt_thread_delay(xTicksToDelay); }
 void ICACHE_FLASH_ATTR vTaskSuspendAll(void) { rt_enter_critical(); }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xTaskResumeAll( void ) { rt_exit_critical();return pdTRUE; }
-void ICACHE_FLASH_ATTR vTaskSwitchContext(void) { rt_interrupt_enter();rt_schedule();rt_interrupt_leave(); }
 portTickType ICACHE_FLASH_ATTR xTaskGetTickCount(void) { return rt_tick_get(); }
 void ICACHE_FLASH_ATTR xPortSysTickHandle(void) { rt_interrupt_enter();rt_tick_increase();rt_interrupt_leave(); }
 
-unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxTaskGetStackHighWaterMark( xTaskHandle xTask )
+xQueueHandle ICACHE_FLASH_ATTR xQueueGenericCreate( unsigned portBASE_TYPE uxQueueLength, unsigned portBASE_TYPE uxItemSize, unsigned char ucQueueType )
 {
-    ets_printf("uxTaskGetStackHighWaterMark\n");
-    return 0;
+    char name[10];
+    sprintf(name,"q%02d",((++mq_index)%100));
+    rt_mq_t mq = rt_mq_create(name,uxItemSize,uxQueueLength,RT_IPC_FLAG_FIFO);
+#ifdef SHOW_DEBUG_INFO
+    if (mq)
+        ets_printf("QueueCreate name:%s count:%d size:%d\n",name,uxQueueLength,uxItemSize);
+#endif
+    return mq;
 }
-void ICACHE_FLASH_ATTR vTaskStepTick(portTickType xTicksToJump)
+void ICACHE_FLASH_ATTR vQueueDelete( xQueueHandle xQueue )
 {
-    ets_printf("vTaskStepTick\n");
+    rt_mq_t mq = xQueue;
+#ifdef SHOW_DEBUG_INFO
+    if (mq)
+        ets_printf("QueueDelete name:%s\n",mq->parent.parent.name);
+#endif
+    rt_mq_delete(mq);
 }
-portTickType ICACHE_FLASH_ATTR prvGetExpectedIdleTime(void)
+signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSend( xQueueHandle xQueue, const void * const pvItemToQueue, portTickType xTicksToWait, portBASE_TYPE xCopyPosition )
 {
-    ets_printf("prvGetExpectedIdleTime\n");
-    return 0;
+    rt_mq_t mq = xQueue;
+    rt_err_t err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
+#ifdef SHOW_DEBUG_INFO
+    ets_printf("QueueSend name:%s wait:%d pos:%d ret:%d\n",mq->parent.parent.name,xTicksToWait,xCopyPosition,err);
+#endif
+    return (err==RT_EOK)?pdPASS:errQUEUE_FULL;
 }
+signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSendFromISR( xQueueHandle xQueue, const void * const pvItemToQueue, signed portBASE_TYPE *pxHigherPriorityTaskWoken, portBASE_TYPE xCopyPosition )
+{
+    rt_mq_t mq = xQueue;
+    rt_err_t err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
+#ifdef SHOW_DEBUG_INFO
+    ets_printf("QueueSendISR name:%s pos:%d ret:%d\n",mq->parent.parent.name,xCopyPosition,err);
+#endif
+    if (pxHigherPriorityTaskWoken) *pxHigherPriorityTaskWoken = pdFALSE;
+    return (err==RT_EOK)?pdPASS:errQUEUE_FULL;
+}
+signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericReceive( xQueueHandle xQueue, const void * const pvBuffer, portTickType xTicksToWait, portBASE_TYPE xJustPeeking )
+{
+    rt_mq_t mq = xQueue;
+    rt_err_t err = rt_mq_recv(mq,(void *)pvBuffer,mq->msg_size,xTicksToWait);
+#ifdef SHOW_DEBUG_INFO
+    ets_printf("QueueRecv name:%s wait:%d peek:%d ret:%d\n",mq->parent.parent.name,xTicksToWait,xJustPeeking,err);
+#endif
+    return (err==RT_EOK)?pdPASS:errQUEUE_EMPTY;
+}
+signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueReceiveFromISR( xQueueHandle xQueue, const void * const pvBuffer, signed portBASE_TYPE *pxHigherPriorityTaskWoken )
+{
+    rt_mq_t mq = xQueue;
+    rt_err_t err = rt_mq_recv(mq,(void *)pvBuffer,mq->msg_size,0);
+#ifdef SHOW_DEBUG_INFO
+    ets_printf("QueueRecvISR name:%s ret:%d\n",mq->parent.parent.name,err);
+#endif
+    if (pxHigherPriorityTaskWoken) *pxHigherPriorityTaskWoken = pdFALSE;
+    return (err==RT_EOK)?pdPASS:errQUEUE_EMPTY;
+}
+
+unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaitingFromISR(const xQueueHandle xQueue) { rt_mq_t mq = xQueue; return mq->entry; }
+unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaiting(const xQueueHandle xQueue) { rt_mq_t mq = xQueue; return mq->entry; }
 
 xTimerHandle ICACHE_FLASH_ATTR xTimerCreate( const signed char * const pcTimerName, portTickType xTimerPeriodInTicks, unsigned portBASE_TYPE uxAutoReload, void *pvTimerID, tmrTIMER_CALLBACK pxCallbackFunction )
 {
-    ets_printf("xTimerCreate\n");
+    ets_printf("xTimerCreate Failed!\n");
     return 0;
 }
 portBASE_TYPE ICACHE_FLASH_ATTR xTimerGenericCommand( xTimerHandle xTimer, portBASE_TYPE xCommandID, portTickType xOptionalValue, signed portBASE_TYPE *pxHigherPriorityTaskWoken, portTickType xBlockTime )
 {
-    ets_printf("xTimerGenericCommand\n");
+    ets_printf("xTimerGenericCommand Failed!\n");
+    return pdFAIL;
+}
+
+void ICACHE_FLASH_ATTR vTaskStepTick(portTickType xTicksToJump)
+{
+    ets_printf("vTaskStepTick Failed!\n");
+}
+portTickType ICACHE_FLASH_ATTR prvGetExpectedIdleTime(void)
+{
+    ets_printf("prvGetExpectedIdleTime Failed!\n");
     return 0;
 }
 
-xQueueHandle ICACHE_FLASH_ATTR xQueueGenericCreate( unsigned portBASE_TYPE uxQueueLength, unsigned portBASE_TYPE uxItemSize, unsigned char ucQueueType )
-{
-    ets_printf("xQueueGenericCreate\n");
-    return malloc(100);
-}
-void ICACHE_FLASH_ATTR vQueueDelete( xQueueHandle xQueue )
-{
-    ets_printf("vQueueDelete\n");
-}
-signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSend( xQueueHandle xQueue, const void * const pvItemToQueue, portTickType xTicksToWait, portBASE_TYPE xCopyPosition )
-{
-    ets_printf("xQueueGenericSend\n");
-    return pdPASS;
-}
-signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericReceive( xQueueHandle xQueue, const void * const pvBuffer, portTickType xTicksToWait, portBASE_TYPE xJustPeeking )
-{
-    ets_printf("xQueueGenericReceive\n");
-    return pdPASS;
-}
-signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSendFromISR( xQueueHandle xQueue, const void * const pvItemToQueue, signed portBASE_TYPE *pxHigherPriorityTaskWoken, portBASE_TYPE xCopyPosition )
-{
-    return pdPASS;
-}
-signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueReceiveFromISR( xQueueHandle xQueue, const void * const pvBuffer, signed portBASE_TYPE *pxHigherPriorityTaskWoken )
-{
-    ets_printf("xQueueReceiveFromISR\n");
-    return pdPASS;
-}
-unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaitingFromISR( const xQueueHandle xQueue )
-{
-    ets_printf("uxQueueMessagesWaitingFromISR\n");
-    return pdPASS;
-}
-unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaiting( const xQueueHandle xQueue )
-{
-    ets_printf("uxQueueMessagesWaiting\n");
-    return pdPASS;
-}
 xQueueHandle ICACHE_FLASH_ATTR xQueueCreateMutex( unsigned char ucQueueType )
 {
     ets_printf("xQueueCreateMutex Failed!\n");

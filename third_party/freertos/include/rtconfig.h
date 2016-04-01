@@ -55,4 +55,8 @@
 /* Using Dynamic Heap Management */
 #define RT_USING_HEAP
 
+#define WDEV_NOW() REG_READ(0x3ff20c00)
+#define ShowInfo(s,d) {ets_printf("n:%s t:%d\n",s,WDEV_NOW()); if(d) ets_delay_us(d);}
+#define IDLE_THREAD_STACK_SIZE 512
+
 #endif
