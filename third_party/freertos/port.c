@@ -71,6 +71,10 @@
 #include <xtensa/tie/xt_interrupt.h>
 #include <xtensa/tie/xt_timer.h>
 
+//#define SHOW_DEBUG_INFO
+#include <rtthread.h>
+extern rt_thread_t rt_current_thread;
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/xtensa_rtos.h"
@@ -201,6 +205,9 @@ void SoftIsrHdl(void *arg)
 	{
 //if( DbgVal5==1 || DbgVal10==1 )
 	//printf("_x_s,");
+#ifdef SHOW_DEBUG_INFO
+		ets_printf("SwitchISR cur:%s %d:%d\n",rt_current_thread->name,SWReq,xHigherPriorityTaskWoken);
+#endif
 		_xt_timer_int1();
 		SWReq = 0;
 	}
