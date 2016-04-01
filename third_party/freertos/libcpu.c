@@ -82,9 +82,6 @@ rt_uint8_t *rt_hw_stack_init(void *tentry, void *parameter, rt_uint8_t *stack_ad
 
 void ICACHE_FLASH_ATTR rtthread_startup(void)
 {
-    /* show version */
-    rt_show_version();
-
     /* init tick */
     rt_system_tick_init();
 

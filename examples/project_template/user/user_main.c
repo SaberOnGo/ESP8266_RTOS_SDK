@@ -32,6 +32,7 @@
 *******************************************************************************/
 void user_init(void)
 {
-    printf("SDK version:%s\n", system_get_sdk_version());
+    rt_show_version();
+    printf("SDK version:%s\n\n\n", system_get_sdk_version());
 }
 
