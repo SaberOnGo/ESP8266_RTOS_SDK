@@ -12,8 +12,8 @@
 #     a generated lib/image xxx.a ()
 #
 TARGET = eagle
-FLAVOR = release
-#FLAVOR = debug
+#FLAVOR = release
+FLAVOR = debug
 
 #EXTRA_CCFLAGS += -u
 
@@ -38,11 +38,11 @@ TARGET_LDFLAGS =		\
 	--text-section-literals
 
 ifeq ($(FLAVOR),debug)
-    TARGET_LDFLAGS += -g -O0
+    TARGET_LDFLAGS += -g -O2
 endif
 
 ifeq ($(FLAVOR),release)
-    TARGET_LDFLAGS += -Os
+    TARGET_LDFLAGS += -g -O0
 endif
 
 COMPONENTS_eagle.app.v6 = \

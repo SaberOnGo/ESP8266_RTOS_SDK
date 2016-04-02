@@ -118,11 +118,11 @@ void ICACHE_FLASH_ATTR ff(void *pp)
 signed portBASE_TYPE ICACHE_FLASH_ATTR xTaskGenericCreate( pdTASK_CODE pxTaskCode, const signed char * const pcName, unsigned short usStackDepth, void *pvParameters, unsigned portBASE_TYPE uxPriority, xTaskHandle *pxCreatedTask, portSTACK_TYPE *puxStackBuffer, const xMemoryRegion * const xRegions )
 {
     signed portBASE_TYPE xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-    rt_thread_t thread = *pxCreatedTask = rt_thread_create(pcName,pxTaskCode,pvParameters,usStackDepth+1024,20-uxPriority,10);
+    rt_thread_t thread = *pxCreatedTask = rt_thread_create(pcName,pxTaskCode,pvParameters,usStackDepth*sizeof(portSTACK_TYPE),20-uxPriority,10);
     if (*pxCreatedTask != 0)
     {
 #ifdef SHOW_DEBUG_INFO
-        ets_printf("TaskCreate name:%s pri:%d size:%d\n",pcName,(20-uxPriority),usStackDepth+1024);
+        ets_printf("TaskCreate name:%s pri:%d size:%d\n",pcName,(20-uxPriority),usStackDepth*sizeof(portSTACK_TYPE));
 #endif
         rt_thread_startup(*pxCreatedTask);
         xReturn = pdPASS;

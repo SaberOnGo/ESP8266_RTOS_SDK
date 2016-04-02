@@ -31,6 +31,8 @@
 #include "esp_common.h"
 
 extern long list_thread(void);
+extern int cmd_time(int argc, char **argv);
+
 ALIGN(RT_ALIGN_SIZE)
 static char thread_main_stack[2048];
 struct rt_thread thread_main;
@@ -38,6 +40,7 @@ static void rt_thread_entry_main(void* parameter)
 {
     /* init finsh */
 #ifdef RT_USING_FINSH
+    cmd_time(0,0);
     finsh_system_init();
     finsh_set_device(FINSH_DEVICE_NAME);
 #endif

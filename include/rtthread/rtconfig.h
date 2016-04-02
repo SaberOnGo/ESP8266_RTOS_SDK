@@ -21,20 +21,10 @@
 /* Tick per Second */
 #define RT_TICK_PER_SECOND	100
 
-/* SECTION: RT_DEBUG */
-/* Thread Debug */
-#define RT_DEBUG
-#define RT_THREAD_DEBUG
-
-#define RT_USING_OVERFLOW_CHECK
-
-/* Using Hook */
-#define RT_USING_HOOK
-
 /* Using Software Timer */
 #define RT_USING_TIMER_SOFT
 #define RT_TIMER_THREAD_PRIO		12
-#define RT_TIMER_THREAD_STACK_SIZE	512
+#define RT_TIMER_THREAD_STACK_SIZE	1024
 
 /* SECTION: IPC */
 /* Using Semaphore*/
@@ -79,10 +69,11 @@
 /* Using symbol table */
 #define FINSH_USING_SYMTAB
 #define FINSH_USING_DESCRIPTION
-#define FINSH_THREAD_STACK_SIZE	4096
+#define FINSH_THREAD_STACK_SIZE	2048
 
 #define WDEV_NOW() REG_READ(0x3ff20c00)
 #define ShowInfo(s,d) {ets_printf("n:%s t:%d\n",s,WDEV_NOW()); if(d) ets_delay_us(d);}
-#define IDLE_THREAD_STACK_SIZE 512
+#define IDLE_THREAD_STACK_SIZE 1024
+#define RT_DEBUG_TIMER 0
 
 #endif

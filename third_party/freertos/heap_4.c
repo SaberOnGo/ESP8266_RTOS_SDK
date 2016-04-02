@@ -142,7 +142,7 @@ static xBlockLink xStart, *pxEnd = NULL;
 /* Keeps track of the number of free bytes remaining, but says nothing about
 fragmentation. */
 //static size_t xFreeBytesRemaining = ( ( size_t ) heapADJUSTED_HEAP_SIZE ) & ( ( size_t ) ~portBYTE_ALIGNMENT_MASK );
-static size_t xFreeBytesRemaining;
+static size_t xMinRemaining,xFreeBytesRemaining;
 
 /* Gets set to the top bit of an size_t type.  When this bit in the xBlockSize 
 member of an xBlockLink structure is set then the block belongs to the 
@@ -242,6 +242,8 @@ void *pvReturn = NULL;
 					}
 
 					xFreeBytesRemaining -= pxBlock->xBlockSize;
+					if (xMinRemaining > xFreeBytesRemaining)
+						xMinRemaining = xFreeBytesRemaining;
 
 					/* The block is being returned - it is allocated and owned
 					by the application and has no "next" block. */
@@ -392,7 +394,7 @@ static void prvHeapInit( void )
 xBlockLink *pxFirstFreeBlock;
 unsigned char *pucHeapEnd, *pucAlignedHeap;
 
-    xFreeBytesRemaining = ( ( size_t ) heapADJUSTED_HEAP_SIZE ) & ( ( size_t ) ~portBYTE_ALIGNMENT_MASK );
+    xMinRemaining = xFreeBytesRemaining = ( ( size_t ) heapADJUSTED_HEAP_SIZE ) & ( ( size_t ) ~portBYTE_ALIGNMENT_MASK );
     xTotalHeapSize = xFreeBytesRemaining ;
 	ucHeap = &_heap_start;
 
@@ -421,6 +423,8 @@ unsigned char *pucHeapEnd, *pucAlignedHeap;
 
 	/* The heap now contains pxEnd. */
 	xFreeBytesRemaining -= heapSTRUCT_SIZE;
+	if (xMinRemaining > xFreeBytesRemaining)
+		xMinRemaining = xFreeBytesRemaining;
 
 	/* Work out the position of the top bit in a size_t variable. */
 	xBlockAllocatedBit = ( ( size_t ) 1 ) << ( ( sizeof( size_t ) * heapBITS_PER_BYTE ) - 1 );
@@ -478,3 +482,9 @@ unsigned char *puc;
 	}
 }
 
+void list_mem(void)
+{
+    rt_kprintf("total memory: %d\n", xTotalHeapSize);
+    rt_kprintf("used memory : %d\n", xTotalHeapSize-xFreeBytesRemaining);
+    rt_kprintf("maximum allocated memory: %d\n", xTotalHeapSize-xMinRemaining);
+}
