@@ -4,10 +4,12 @@
 #include <rtthread.h>
 
 //#define SHOW_DEBUG_INFO
+//#define SHOW_QUE_DEBUG_INFO
 volatile portSTACK_TYPE *pxCurrentTCB = 0;
 static rt_thread_t cur_old = 0;
 extern rt_thread_t rt_current_thread;
 static unsigned short mq_index = 0;
+static unsigned short ms_index = 0;
 
 void rt_hw_context_switch(rt_uint32_t from, rt_uint32_t to)
 {
@@ -100,13 +102,12 @@ void rt_hw_console_output(const char *str)
 #if 0
 void ICACHE_FLASH_ATTR ff(void *pp)
 {
-    static int iiii = 0;
-    if (iiii == 0)
+    static int thread_i = 0;
+    if (thread_i == 0)
     {
         vPortExitCritical();
-        iiii = 1;
+        thread_i = 1;
     }
-    int cc = 0;
     while (1)
     {
         ets_printf("%d run %d\n",pp,rt_tick_get());
@@ -164,70 +165,76 @@ portTickType ICACHE_FLASH_ATTR xTaskGetTickCount(void) { return rt_tick_get(); }
 void ICACHE_FLASH_ATTR vTaskSwitchContext(void) { rt_interrupt_enter();rt_schedule();rt_interrupt_leave(); }
 void ICACHE_FLASH_ATTR xPortSysTickHandle(void) { rt_interrupt_enter();rt_tick_increase();rt_interrupt_leave(); }
 
+extern rt_mailbox_t rt_fmq_create(const char *name, rt_size_t item, rt_size_t size, rt_uint8_t flag);
+extern rt_err_t rt_fmq_delete(rt_mailbox_t mb);
+extern rt_err_t rt_fmq_send(rt_mailbox_t mb, void* value, rt_int32_t pos, rt_int32_t timeout);
+extern rt_err_t rt_fmq_recv(rt_mailbox_t mb, void *value, rt_int32_t peek, rt_int32_t timeout);
 xQueueHandle ICACHE_FLASH_ATTR xQueueGenericCreate( unsigned portBASE_TYPE uxQueueLength, unsigned portBASE_TYPE uxItemSize, unsigned char ucQueueType )
 {
-    char name[10];
-    sprintf(name,"q%02d",((++mq_index)%100));
-    rt_mq_t mq = rt_mq_create(name,uxItemSize,uxQueueLength,RT_IPC_FLAG_FIFO);
-#ifdef SHOW_DEBUG_INFO
-    if (mq)
-        ets_printf("QueueCreate name:%s count:%d size:%d\n",name,uxQueueLength,uxItemSize);
+    char name[10] = {0};
+    rt_object_t obj = 0;
+    if (uxItemSize <= 0 || uxQueueLength <= 0)
+    {
+        sprintf(name,"s%02d",((++ms_index)%100));
+        obj = (rt_object_t)rt_sem_create(name,0,RT_IPC_FLAG_PRIO);
+    }
+    else
+    {
+        sprintf(name,"q%02d",((++mq_index)%100));
+        obj = (rt_object_t)rt_fmq_create(name,uxItemSize,uxQueueLength,RT_IPC_FLAG_PRIO);
+    }
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueCreate name:%s count:%d size:%d\n",name,uxQueueLength,uxItemSize);
 #endif
-    return mq;
+    return obj;
 }
 void ICACHE_FLASH_ATTR vQueueDelete( xQueueHandle xQueue )
 {
-    rt_mq_t mq = xQueue;
-#ifdef SHOW_DEBUG_INFO
-    if (mq)
-        ets_printf("QueueDelete name:%s\n",mq->parent.parent.name);
+    rt_object_t obj = xQueue;
+    if (obj == 0)
+        return;
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueDelete name:%s\n",obj->name);
 #endif
-    rt_mq_delete(mq);
+    if (obj->type == RT_Object_Class_Semaphore)
+        rt_sem_delete((rt_sem_t)obj);
+    else
+        rt_fmq_delete((rt_mailbox_t)obj);
 }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSend( xQueueHandle xQueue, const void * const pvItemToQueue, portTickType xTicksToWait, portBASE_TYPE xCopyPosition )
 {
-    rt_mq_t mq = xQueue;
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueSend cur:%s name:%s wait:%d pos:%d\n",rt_current_thread->name,mq->parent.parent.name,xTicksToWait,xCopyPosition);
+    rt_object_t obj = xQueue;
+    if (obj == 0)
+        return errQUEUE_FULL;
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueSend cur:%s name:%s wait:%d pos:%d\n",rt_current_thread->name,obj->name,xTicksToWait,xCopyPosition);
 #endif
     rt_err_t err = RT_EOK;
-    portTickType tick = 0;
-    while (1)
-    {
-        if (xCopyPosition == 0)
-            err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
-        else if (xCopyPosition == 1)
-            err = rt_mq_urgent(mq,(void *)pvItemToQueue,mq->msg_size);
-        else
-            configASSERT(0);
-        if (xTicksToWait == 0 || err == RT_EOK)
-            break;
-        if (tick > xTicksToWait)
-            break;
-        rt_thread_delay(1);
-        tick++;
-    }
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueSendOver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
+    if (obj->type == RT_Object_Class_Semaphore)
+        err = rt_sem_release((rt_sem_t)obj);
+    else
+        err = rt_fmq_send((rt_mailbox_t)obj,(void *)pvItemToQueue,xCopyPosition,xTicksToWait);
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueSendOver cur:%s name:%s ret:%d\n",rt_current_thread->name,obj->name,err);
 #endif
     return (err==RT_EOK)?pdPASS:errQUEUE_FULL;
 }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSendFromISR( xQueueHandle xQueue, const void * const pvItemToQueue, signed portBASE_TYPE *pxHigherPriorityTaskWoken, portBASE_TYPE xCopyPosition )
 {
+    rt_object_t obj = xQueue;
+    if (obj == 0)
+        return errQUEUE_FULL;
     rt_interrupt_enter();
-    rt_mq_t mq = xQueue;
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueSendISR cur:%s name:%s pos:%d\n",rt_current_thread->name,mq->parent.parent.name,xCopyPosition);
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueSendISR cur:%s name:%s pos:%d\n",rt_current_thread->name,obj->name,xCopyPosition);
 #endif
     rt_err_t err = RT_EOK;
-    if (xCopyPosition == 0)
-        err = rt_mq_send(mq,(void *)pvItemToQueue,mq->msg_size);
-    else if (xCopyPosition == 1)
-        err = rt_mq_urgent(mq,(void *)pvItemToQueue,mq->msg_size);
+    if (obj->type == RT_Object_Class_Semaphore)
+        err = rt_sem_release((rt_sem_t)obj);
     else
-        configASSERT(0);
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueSendISROver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
+        err = rt_fmq_send((rt_mailbox_t)obj,(void *)pvItemToQueue,xCopyPosition,0);
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueSendISROver cur:%s name:%s ret:%d\n",rt_current_thread->name,obj->name,err);
 #endif
     if (pxHigherPriorityTaskWoken) *pxHigherPriorityTaskWoken = pdFAIL;
     rt_interrupt_leave();
@@ -235,24 +242,47 @@ signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericSendFromISR( xQueueHandle xQ
 }
 signed portBASE_TYPE ICACHE_FLASH_ATTR xQueueGenericReceive( xQueueHandle xQueue, const void * const pvBuffer, portTickType xTicksToWait, portBASE_TYPE xJustPeeking )
 {
-    rt_mq_t mq = xQueue;
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueRecv cur:%s name:%s wait:%d peek:%d\n",rt_current_thread->name,mq->parent.parent.name,xTicksToWait,xJustPeeking);
+    rt_object_t obj = xQueue;
+    if (obj == 0)
+        return errQUEUE_EMPTY;
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueRecv cur:%s name:%s wait:%d peek:%d\n",rt_current_thread->name,obj->name,xTicksToWait,xJustPeeking);
 #endif
     rt_err_t err = RT_EOK;
-    if (xJustPeeking != pdTRUE)
-        err = rt_mq_recv(mq,(void *)pvBuffer,mq->msg_size,xTicksToWait);
+    if (obj->type == RT_Object_Class_Semaphore)
+        err = rt_sem_take((rt_sem_t)obj,xTicksToWait);
     else
-        configASSERT(0);
-#ifdef SHOW_DEBUG_INFO
-    ets_printf("QueueRecvOver cur:%s name:%s ret:%d\n",rt_current_thread->name,mq->parent.parent.name,err);
+        err = rt_fmq_recv((rt_mailbox_t)obj,(void *)pvBuffer,xJustPeeking,xTicksToWait);
+#ifdef SHOW_QUE_DEBUG_INFO
+    ets_printf("QueueRecvOver cur:%s name:%s ret:%d\n",rt_current_thread->name,obj->name,err);
 #endif
     return (err==RT_EOK)?pdPASS:errQUEUE_EMPTY;
 }
+unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaiting(const xQueueHandle xQueue)
+{ 
+    rt_object_t obj = xQueue;
+    if (obj == 0)
+        return;
+    unsigned portBASE_TYPE count = 0;
+    vPortEnterCritical();
+    if (obj->type == RT_Object_Class_Semaphore)
+        count = ((rt_sem_t)obj)->value;
+    else
+        count = ((rt_mailbox_t)obj)->entry;
+    vPortExitCritical();
+    return count;
+}
 unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaitingFromISR(const xQueueHandle xQueue)
 { 
-    rt_mq_t mq = xQueue;
-    return mq->entry;
+    rt_object_t obj = xQueue;
+    if (obj == 0)
+        return;
+    unsigned portBASE_TYPE count = 0;
+    if (obj->type == RT_Object_Class_Semaphore)
+        count = ((rt_sem_t)obj)->value;
+    else
+        count = ((rt_mailbox_t)obj)->entry;
+    return count;
 }
 
 xTimerHandle ICACHE_FLASH_ATTR xTimerCreate( const signed char * const pcTimerName, portTickType xTimerPeriodInTicks, unsigned portBASE_TYPE uxAutoReload, void *pvTimerID, tmrTIMER_CALLBACK pxCallbackFunction )
