@@ -24,7 +24,7 @@
 /* Using Software Timer */
 #define RT_USING_TIMER_SOFT
 #define RT_TIMER_THREAD_PRIO		12
-#define RT_TIMER_THREAD_STACK_SIZE	1024
+#define RT_TIMER_THREAD_STACK_SIZE	2048
 
 /* SECTION: IPC */
 /* Using Semaphore*/
@@ -73,7 +73,7 @@
 
 #define WDEV_NOW() REG_READ(0x3ff20c00)
 #define ShowInfo(s,d) {ets_printf("n:%s t:%d\n",s,WDEV_NOW()); if(d) ets_delay_us(d);}
-#define IDLE_THREAD_STACK_SIZE 1024
+#define IDLE_THREAD_STACK_SIZE 2048
 #define RT_DEBUG_TIMER 0
 
 #endif

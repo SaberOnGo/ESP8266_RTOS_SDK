@@ -156,6 +156,42 @@ unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxTaskGetStackHighWaterMark( xTaskHandl
     usCount /= sizeof( portSTACK_TYPE );
     return usCount;
 }
+void ICACHE_FLASH_ATTR vTaskStepTick(portTickType xTicksToJump)
+{
+    while (xTicksToJump > 0)
+    {
+        rt_tick_increase();
+        xTicksToJump --;
+    }
+}
+extern struct rt_object_information rt_object_container[];
+portTickType ICACHE_FLASH_ATTR prvGetExpectedIdleTime(void)
+{
+    struct rt_thread *thread;
+    struct rt_list_node *node;
+    struct rt_list_node *list = &rt_object_container[RT_Object_Class_Thread].object_list;
+    portTickType idle = 0xffffffff;
+    rt_enter_critical();
+    for (node = list->next; node != list; node = node->next)
+    {
+        thread = rt_list_entry(node, struct rt_thread, list);
+        if (thread->stat == RT_THREAD_INIT || thread->stat == RT_THREAD_CLOSE)
+        {
+            idle = 0;
+            break;
+        }
+        if (thread->init_priority < RT_THREAD_PRIORITY_MAX-1)
+        {
+            if (idle > thread->remaining_tick)
+                idle = thread->remaining_tick;
+        }
+    }
+    if (idle == 0xffffffff)
+        idle = 0;
+    rt_exit_critical();
+    ets_printf("prvGetExpectedIdleTime tick:%d\n",idle);
+    return idle;
+}
 
 void ICACHE_FLASH_ATTR vTaskStartScheduler(void) { xPortStartScheduler(); }
 void ICACHE_FLASH_ATTR vTaskDelay(portTickType xTicksToDelay) { rt_thread_delay(xTicksToDelay); }
@@ -167,7 +203,7 @@ void ICACHE_FLASH_ATTR xPortSysTickHandle(void) { rt_interrupt_enter();rt_tick_i
 
 extern rt_mailbox_t rt_fmq_create(const char *name, rt_size_t item, rt_size_t size, rt_uint8_t flag);
 extern rt_err_t rt_fmq_delete(rt_mailbox_t mb);
-extern rt_err_t rt_fmq_send(rt_mailbox_t mb, void* value, rt_int32_t pos, rt_int32_t timeout);
+extern rt_err_t rt_fmq_send(rt_mailbox_t mb, void *value, rt_int32_t pos, rt_int32_t timeout);
 extern rt_err_t rt_fmq_recv(rt_mailbox_t mb, void *value, rt_int32_t peek, rt_int32_t timeout);
 xQueueHandle ICACHE_FLASH_ATTR xQueueGenericCreate( unsigned portBASE_TYPE uxQueueLength, unsigned portBASE_TYPE uxItemSize, unsigned char ucQueueType )
 {
@@ -294,14 +330,4 @@ portBASE_TYPE ICACHE_FLASH_ATTR xTimerGenericCommand( xTimerHandle xTimer, portB
 {
     ets_printf("xTimerGenericCommand Failed!\n");
     return pdFAIL;
-}
-
-void ICACHE_FLASH_ATTR vTaskStepTick(portTickType xTicksToJump)
-{
-    ets_printf("vTaskStepTick Failed!\n");
-}
-portTickType ICACHE_FLASH_ATTR prvGetExpectedIdleTime(void)
-{
-    ets_printf("prvGetExpectedIdleTime Failed!\n");
-    return 0;
 }

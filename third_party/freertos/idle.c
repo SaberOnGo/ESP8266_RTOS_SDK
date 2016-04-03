@@ -174,6 +174,7 @@ void rt_thread_idle_excute(void)
     }
 }
 
+extern void vApplicationIdleHook( void );
 static void rt_thread_idle_entry(void *parameter)
 {
     while (1)
@@ -184,6 +185,7 @@ static void rt_thread_idle_entry(void *parameter)
         #endif
 
         rt_thread_idle_excute();
+        vApplicationIdleHook();
     }
 }
 

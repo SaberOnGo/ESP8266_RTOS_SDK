@@ -1922,8 +1922,7 @@ rt_err_t rt_fmq_send(rt_mailbox_t mb, void *value, rt_int32_t pos, rt_int32_t ti
         {
             pool += mb->out_offset*item;
             rt_memcpy(pool,value,item);
-            if (mb->entry > 0)
-                mb->entry --;
+            mb->entry --;
         }
         else
         {
