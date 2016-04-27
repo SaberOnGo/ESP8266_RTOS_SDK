@@ -5,11 +5,13 @@
 
 //#define SHOW_DEBUG_INFO
 //#define SHOW_QUE_DEBUG_INFO
+//#define SHOW_TIM_DEBUG_INFO
 volatile portSTACK_TYPE *pxCurrentTCB = 0;
 static rt_thread_t cur_old = 0;
 extern rt_thread_t rt_current_thread;
 static unsigned short mq_index = 0;
 static unsigned short ms_index = 0;
+static unsigned short tm_index = 0;
 
 void rt_hw_context_switch(rt_uint32_t from, rt_uint32_t to)
 {
@@ -158,38 +160,42 @@ unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxTaskGetStackHighWaterMark( xTaskHandl
 }
 void ICACHE_FLASH_ATTR vTaskStepTick(portTickType xTicksToJump)
 {
-    while (xTicksToJump > 0)
-    {
+    ets_printf("StepTick tick:%d cur:%s %d\n",xTicksToJump,rt_current_thread->name,WDEV_NOW());
+    while (--xTicksToJump > 0)
         rt_tick_increase();
-        xTicksToJump --;
-    }
+    ets_printf("StepTickOver cur:%s %d\n",rt_current_thread->name,WDEV_NOW());
 }
 extern struct rt_object_information rt_object_container[];
 portTickType ICACHE_FLASH_ATTR prvGetExpectedIdleTime(void)
 {
     struct rt_thread *thread;
+    portTickType idle = 0xffffffff;
+    rt_tick_t current_tick = rt_tick_get();
+    rt_enter_critical();
     struct rt_list_node *node;
     struct rt_list_node *list = &rt_object_container[RT_Object_Class_Thread].object_list;
-    portTickType idle = 0xffffffff;
-    rt_enter_critical();
     for (node = list->next; node != list; node = node->next)
     {
         thread = rt_list_entry(node, struct rt_thread, list);
-        if (thread->stat == RT_THREAD_INIT || thread->stat == RT_THREAD_CLOSE)
+        if (thread->init_priority >= RT_THREAD_PRIORITY_MAX-1)
+            continue;
+        if (thread->stat != RT_THREAD_SUSPEND)
         {
             idle = 0;
             break;
         }
-        if (thread->init_priority < RT_THREAD_PRIORITY_MAX-1)
+        if (!(thread->thread_timer.parent.flag & RT_TIMER_FLAG_ACTIVATED))
+            continue;
+        if ((current_tick - thread->thread_timer.timeout_tick) < RT_TICK_MAX/2)
         {
-            if (idle > thread->remaining_tick)
-                idle = thread->remaining_tick;
+            idle = 0;
+            break;
         }
+        if (idle > (thread->thread_timer.timeout_tick - current_tick))
+            idle = thread->thread_timer.timeout_tick - current_tick;
     }
-    if (idle == 0xffffffff)
-        idle = 0;
     rt_exit_critical();
-    ets_printf("prvGetExpectedIdleTime tick:%d\n",idle);
+    ets_printf("GetIdle tick:%d cur:%s %d\n",idle,rt_current_thread->name,WDEV_NOW());
     return idle;
 }
 
@@ -222,6 +228,13 @@ xQueueHandle ICACHE_FLASH_ATTR xQueueGenericCreate( unsigned portBASE_TYPE uxQue
 #ifdef SHOW_QUE_DEBUG_INFO
     ets_printf("QueueCreate name:%s count:%d size:%d\n",name,uxQueueLength,uxItemSize);
 #endif
+    return obj;
+}
+xQueueHandle ICACHE_FLASH_ATTR xQueueCreateMutex( unsigned char ucQueueType )
+{
+    xQueueHandle obj = xQueueGenericCreate(1,0,ucQueueType);
+    if (obj)
+        xQueueGenericSend(obj,0,0,queueSEND_TO_BACK);
     return obj;
 }
 void ICACHE_FLASH_ATTR vQueueDelete( xQueueHandle xQueue )
@@ -323,11 +336,56 @@ unsigned portBASE_TYPE ICACHE_FLASH_ATTR uxQueueMessagesWaitingFromISR(const xQu
 
 xTimerHandle ICACHE_FLASH_ATTR xTimerCreate( const signed char * const pcTimerName, portTickType xTimerPeriodInTicks, unsigned portBASE_TYPE uxAutoReload, void *pvTimerID, tmrTIMER_CALLBACK pxCallbackFunction )
 {
-    ets_printf("xTimerCreate Failed!\n");
-    return 0;
+    char name[10] = {0},*tname = (char *)pcTimerName;
+    rt_timer_t obj = 0;
+    if (tname == 0)
+    {
+        sprintf(name,"t%02d",((++tm_index)%100));
+        tname = name;
+    }
+    if (xTimerPeriodInTicks > 0)
+    {
+        rt_uint8_t flag = (uxAutoReload == pdTRUE)?(RT_TIMER_FLAG_PERIODIC):(RT_TIMER_FLAG_ONE_SHOT);
+        obj = rt_timer_create(tname,pxCallbackFunction,pvTimerID,xTimerPeriodInTicks,flag);
+    }
+#ifdef SHOW_TIM_DEBUG_INFO
+    ets_printf("xTimerCreate name:%s tick:%d auto:%d id:%x func:%x\n",tname,xTimerPeriodInTicks,uxAutoReload,pvTimerID,pxCallbackFunction);
+#endif
+    return obj;
 }
 portBASE_TYPE ICACHE_FLASH_ATTR xTimerGenericCommand( xTimerHandle xTimer, portBASE_TYPE xCommandID, portTickType xOptionalValue, signed portBASE_TYPE *pxHigherPriorityTaskWoken, portTickType xBlockTime )
 {
-    ets_printf("xTimerGenericCommand Failed!\n");
-    return pdFAIL;
+    rt_timer_t obj = xTimer;
+    if (obj == 0)
+        return pdFAIL;
+    if (pxHigherPriorityTaskWoken)
+        rt_interrupt_enter();
+#ifdef SHOW_TIM_DEBUG_INFO
+    ets_printf("xTimerCommand cur:%s name:%s cmd:%d val:%d tim:%d\n",rt_current_thread->name,obj->parent.name,xCommandID,xOptionalValue,xBlockTime);
+#endif
+    rt_err_t err = RT_EOK;
+    switch(xCommandID)
+    {
+    case tmrCOMMAND_START:
+        err = rt_timer_start(obj);
+        break;
+    case tmrCOMMAND_STOP:
+        err = rt_timer_stop(obj);
+        break;
+    case tmrCOMMAND_CHANGE_PERIOD:{
+        rt_tick_t tick = xOptionalValue;
+        err = rt_timer_control(obj,RT_TIMER_CTRL_SET_TIME,&tick);
+        break;}
+    case tmrCOMMAND_DELETE:
+        err = rt_timer_delete(obj);
+        break;
+    }
+#ifdef SHOW_TIM_DEBUG_INFO
+    ets_printf("xTimerCommandOver cur:%s name:%s ret:%d\n",rt_current_thread->name,obj->parent.name,err);
+#endif
+    if (pxHigherPriorityTaskWoken) {
+        *pxHigherPriorityTaskWoken = pdFAIL;
+        rt_interrupt_leave();
+    }
+    return pdTRUE;
 }
